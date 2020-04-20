@@ -1,0 +1,370 @@
+---
+title: 'Assignment 1 block 2 '
+author: "Karthikeyan Devarajan - Karde799"
+output:
+  pdf_document: default
+  word_document: default
+---
+```{r setup, include=FALSE,echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(mboost)
+library(randomForest)
+library(caret)
+sf1 <- read.csv(file.choose())
+```
+
+## 1.Ensemble Methods  
+
+The classification data is done such that the training data contains 2/3rd of the total data and test data contains 1/3rd of the data.  
+ 
+```{r , echo=FALSE}
+sf1$Spam <- as.factor(sf1$Spam)
+n=dim(sf1)[1]
+suppressWarnings(RNGversion("3.5.9"))
+id=sample(1:n, floor(n*0.66))
+train=sf1[id,]
+test=sf1[-id,]
+```
+  
+### 1.1.Adaboost Classification Tree  
+
+```{r , echo=FALSE}
+misclassification_train <- vector()
+misclassification_test <- vector()
+J <- 10
+for (i in 1:10){
+  
+  model_boost <- blackboost(Spam ~., data = train,family = AdaExp(), control = boost_control(mstop = J))
+  Y_pred <- predict.mboost(model_boost, newdata = train, type = "class")
+  Y_pred_test <- predict.mboost(model_boost, newdata = test, type = "class" )
+  misclassification_train[i] <- mean(Y_pred != train$Spam)
+  misclassification_test[i] <- mean(Y_pred_test != test$Spam)
+  J <- J+10
+}
+
+Tree_number <- seq(10,100,10)
+par(mfrow=c(1,1))
+cat("Missclassification Rate of Train data\n",min(misclassification_train),"\n")
+cat(" No_of_Trees\n",which(misclassification_train == min(misclassification_train)) * 10,"\n") 
+cat("Missclassification Rate of Test data\n",min(misclassification_test),"\n")
+cat("Number_of_Trees\n",which(misclassification_test == min(misclassification_test)) * 10,"\n") 
+```
+  
+  
+```{r ,echo=FALSE,out.height='25%'}
+plot(x=Tree_number,y = misclassification_train,type="l")
+title(main = "No of Trees vs Misclassification of Train data")
+plot(Tree_number,misclassification_test,type="l")
+title(main = "No of Trees vs Classifications of Test data")
+```
+  
+### 1.2.Random Forest 
+```{r,echo=FALSE}
+misclassification_train_rf <- vector()
+misclassification_test_rf <- vector()
+K <- 10
+control <- trainControl(method="repeatedcv", number=15, repeats=3, search="random")
+for(i in 1:10)
+{
+  model_RF <- randomForest(Spam ~., data = sf1, ntree=K,trControl = control)
+  Y_pred1 <- predict(model_RF, newdata = train, type="response")
+  Y_pred_test1 <- predict(model_RF, newdata = test, type="response")
+  misclassification_train_rf[i] <- mean(Y_pred1 != train$Spam)
+  misclassification_test_rf[i] <- mean(Y_pred_test1 != test$Spam)
+  K <- K+10
+}
+cat("Missclassification Rate of Train data\n",min(misclassification_train_rf),"\n")
+cat(" Number_of_Trees\n",which(misclassification_train_rf == min(misclassification_train_rf)) * 10,"\n") 
+cat("Miss classification Rate of Test data\n",min(misclassification_test_rf),"\n")
+cat("Number_of_Trees\n",which(misclassification_test_rf == min(misclassification_test_rf)) * 10,"\n") 
+```
+  
+  
+```{r , echo=FALSE,,out.height='25%'}
+plot(Tree_number,misclassification_train_rf,type="l")
+title(main = "No of Trees vs Classifications of Train data")
+plot(Tree_number,misclassification_test_rf,type="l")
+title(main = "No of Trees vs Classifications of Test data")
+```
+  
+## 2.Mixture Model  
+  Maximum likelihood focuses on determining the parameters to maximizes the probability of the given data. In Bernoulli equation pi and mu are the estimators.  
+
+i) When K = 2  
+  
+```{r,echo=FALSE,out.height='25%'}
+set.seed(1234567890)
+max_it <- 100 
+min_change <- 0.1 # min change in log likelihood between two consecutive EM iterations
+N=1000 # number of training points
+D=10 # number of dimensions
+x <- matrix(nrow = N, ncol = D) # training data
+true_pi <- vector(length = 2) # true mixing coefficients
+true_mu <- matrix(nrow = 2, ncol = D) # true conditional distributions
+true_pi = c(1/2, 1/2)
+true_mu[1,] = c(0.5, 0.6, 0.4, 0.7, 0.3, 0.8, 0.2, 0.9, 0.1, 1)
+true_mu[2,] = c(0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9, 0)
+# true_mu[3,] = c(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+# true_mu[4,] = c(0.5, 0.7, 0.6, 0.3, 0.6, 0.4, 0.8, 0.8, 0.7, 0.6)
+for (n in 1:N) {
+  k <- sample(1:2, 1, prob = true_pi)
+  for (d in 1:D) {
+    x[n, d] <- rbinom(1, 1, true_mu[k, d])
+  }
+}
+K = 2 # number of guessed components
+z <- matrix(nrow = N, ncol = K) # fractional component assignments
+pi <- vector(length = K) # mixing coefficients
+mu <- matrix(nrow = K, ncol = D) # conditional distributions
+llik <-vector(length = max_it) # log likelihood of the EM iterations
+# Random initialization of the paramters
+pi <- runif(K, 0.49, 0.51)
+pi <- pi / sum(pi)
+for (k in 1:K) {
+  mu[k,] <- runif(D, 0.49, 0.51)
+}
+for (it in 1:max_it) {
+  Sys.sleep(0.5)
+  # E-Step
+  for (p in 1:N) {
+    Component = matrix(1, nrow = 1, ncol = K)
+    total_prob = 0
+    for (i in 1:K) {
+      for (j in 1:D) {
+        Component[1,i] = Component[1,i] * (mu[i,j] ^ x[p,j]) * (1 - mu[i, j]) ^ (1 - x[p,j])
+      }
+      Component[1,i] = Component[1,i] * pi[i]
+      total_prob = total_prob + Component[1,i]
+    }
+    
+    for (i in 1:K) {
+      z[p,i] = Component[1,i] / total_prob
+    }
+  }
+
+  for (i in 1:K) {
+    summation = matrix(0, nrow = N, ncol = 1)
+    for (j in 1:D)
+    {
+      summation = summation + x[,j] * log(mu[i,j]) + (1 - x[,j]) * log(1 -mu[i,j])
+    }
+    llik[it] = llik[it] + sum(z[,i] * (log(pi[i]) + summation))
+  }
+  cat("iteration: ", it, "log likelihood: ", llik[it], "\n")
+  flush.console()
+  if (abs(llik[it] - llik[it-1]) < 0.1 && it > 1)
+  {
+    break
+  }
+  
+  for(i in 1:K){
+    pi[i] = sum(z[,i])/N
+  }
+  
+  for (i in 1:K) {
+    mu[i, ] = colSums(x * z[, i]) / sum(z[,i])
+  }
+}
+
+```
+
+```{r,echo=FALSE,out.height='25%'}
+plot(mu[1,],type = "o",col = "blue",ylim = c(0, 1),main = "Plot for mu values",xlab = "mu values")
+points(mu[2,], type = "o", col = "red")
+cat("The pi value for two components are\n",pi,"\n")
+cat("The mu value for two components are\n")  
+mu
+cat("The number of iteration is",it,"and and the maximum likelihood value is",llik[it],"\n")
+plot(llik[1:it],type="l",xlab = "Index",ylab = "Maximum Log Likelihood")
+```
+  
+ii) K = 3  
+
+```{r,echo=FALSE,out.height='25%'}
+set.seed(1234567890)
+max_it <- 100 
+min_change <- 0.1 # min change in log likelihood between two consecutive EM iterations
+N=1000 # number of training points
+D=10 # number of dimensions
+x <- matrix(nrow = N, ncol = D) # training data
+true_pi <- vector(length = 3) # true mixing coefficients
+true_mu <- matrix(nrow = 4, ncol = D) # true conditional distributions
+true_pi = c(1/3, 1/3,1/3)
+true_mu[1,] = c(0.5, 0.6, 0.4, 0.7, 0.3, 0.8, 0.2, 0.9, 0.1, 1)
+true_mu[2,] = c(0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9, 0)
+true_mu[3,] = c(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+#true_mu[4,] = c(0.5, 0.7, 0.6, 0.3, 0.6, 0.4, 0.8, 0.8, 0.7, 0.6)
+for (n in 1:N) {
+  k <- sample(1:3, 1, prob = true_pi)
+  for (d in 1:D) {
+    x[n, d] <- rbinom(1, 1, true_mu[k, d])
+  }
+}
+K = 3 # number of guessed components
+z <- matrix(nrow = N, ncol = K) # fractional component assignments
+pi <- vector(length = K) # mixing coefficients
+mu <- matrix(nrow = K, ncol = D) # conditional distributions
+llik <-vector(length = max_it) # log likelihood of the EM iterations
+# Random initialization of the paramters
+pi <- runif(K, 0.49, 0.51)
+pi <- pi / sum(pi)
+for (k in 1:K) {
+  mu[k,] <- runif(D, 0.49, 0.51)
+}
+for (it in 1:max_it) {
+  #points(mu[4,], type="o", col="yellow")
+  #Sys.sleep(0.5)
+  # E-Step
+  #Bernoulli function from slide 9
+  for (p in 1:N) {
+    Component = matrix(1, nrow = 1, ncol = K)
+    total_prob = 0
+    for (i in 1:K) {
+      for (j in 1:D) {
+        Component[1,i] = Component[1,i] * (mu[i,j] ^ x[p,j]) * (1 - mu[i, j]) ^ (1 - x[p,j])
+      }
+      Component[1,i] = Component[1,i] * pi[i]
+      total_prob = total_prob + Component[1,i]
+    }
+    
+    for (i in 1:K) {
+      z[p,i] = Component[1,i] / total_prob
+    }
+  }
+
+  for (i in 1:K) {
+    summation = matrix(0, nrow = N, ncol = 1)
+    for (j in 1:D)
+    {
+      summation = summation + x[,j] * log(mu[i,j]) + (1 - x[,j]) * log(1 -mu[i,j])
+    }
+    llik[it] = llik[it] + sum(z[,i] * (log(pi[i]) + summation))
+  }
+  cat("iteration: ", it, "log likelihood: ", llik[it], "\n")
+  flush.console()
+  if (abs(llik[it] - llik[it-1]) < 0.1 && it > 1)
+  {
+    break
+  }
+  
+  for(i in 1:K){
+    pi[i] = sum(z[,i])/N
+  }
+  
+  for (i in 1:K) {
+    mu[i, ] = colSums(x * z[, i]) / sum(z[,i])
+  }
+}
+```
+  
+```{r,echo=FALSE,out.height='25%'}
+plot(mu[1,],type = "o",col = "blue",ylim = c(0, 1),main = "Plot for mu values")
+points(mu[2,], type = "o", col = "red")
+points(mu[3,], type = "o", col = "green") 
+cat("The pi value for three components are\n",pi,"\n")
+cat("The mu value for three components are \n")
+mu
+cat("The number of iteration is",it,"and and the maximum likelihood value is",llik[it],"\n")
+plot(llik[1:it],type="l",xlab = "Index",ylab = "Maximum Log Likelihood")
+```
+  
+  
+iii)K = 4  
+  
+```{r,echo=FALSE,out.height='25%'}
+set.seed(1234567890)
+max_it <- 100 
+min_change <- 0.1 # min change in log likelihood between two consecutive EM iterations
+N=1000 # number of training points
+D=10 # number of dimensions
+x <- matrix(nrow = N, ncol = D) # training data
+true_pi <- vector(length = 4) # true mixing coefficients
+true_mu <- matrix(nrow = 4, ncol = D) # true conditional distributions
+true_pi = c(1/4, 1/4, 1/4, 1/4)
+true_mu[1,] = c(0.5, 0.6, 0.4, 0.7, 0.3, 0.8, 0.2, 0.9, 0.1, 1)
+true_mu[2,] = c(0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9, 0)
+true_mu[3,] = c(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+true_mu[4,] = c(0.5, 0.7, 0.6, 0.3, 0.6, 0.4, 0.8, 0.8, 0.7, 0.6)
+for (n in 1:N) {
+  k <- sample(1:4, 1, prob = true_pi)
+  for (d in 1:D) {
+    x[n, d] <- rbinom(1, 1, true_mu[k, d])
+  }
+}
+K = 4 # number of guessed components
+z <- matrix(nrow = N, ncol = K) # fractional component assignments
+pi <- vector(length = K) # mixing coefficients
+mu <- matrix(nrow = K, ncol = D) # conditional distributions
+llik <-vector(length = max_it) # log likelihood of the EM iterations
+# Random initialization of the paramters
+pi <- runif(K, 0.49, 0.51)
+pi <- pi / sum(pi)
+for (k in 1:K) {
+  mu[k,] <- runif(D, 0.49, 0.51)
+}
+for (it in 1:max_it) {
+  Sys.sleep(0.5)
+  # E-Step
+  for (p in 1:N) {
+    Component = matrix(1, nrow = 1, ncol = K)
+    total_prob = 0
+    for (i in 1:K) {
+      for (j in 1:D) {
+        Component[1,i] = Component[1,i] * (mu[i,j] ^ x[p,j]) * (1 - mu[i, j]) ^ (1 - x[p,j])
+      }
+      Component[1,i] = Component[1,i] * pi[i]
+      total_prob = total_prob + Component[1,i]
+    }
+    
+    for (i in 1:K) {
+      z[p,i] = Component[1,i] / total_prob
+    }
+  }
+
+  for (i in 1:K) {
+    summation = matrix(0, nrow = N, ncol = 1)
+    for (j in 1:D)
+    {
+      summation = summation + x[,j] * log(mu[i,j]) + (1 - x[,j]) * log(1 -mu[i,j])
+    }
+    llik[it] = llik[it] + sum(z[,i] * (log(pi[i]) + summation))
+  }
+  cat("iteration: ", it, "log likelihood: ", llik[it], "\n")
+  flush.console()
+  if (abs(llik[it] - llik[it-1]) < min_change && it > 1)
+  {
+    break
+  }
+  
+  for(i in 1:K){
+    pi[i] = sum(z[,i])/N
+  }
+  
+  for (i in 1:K) {
+    mu[i, ] = colSums(x * z[, i]) / sum(z[,i])
+  }
+}
+```
+  
+  
+```{r,echo=FALSE,out.height='25%'}
+plot(mu[1,],type = "o",col = "blue",ylim = c(0, 1),main = "Plot for mu values",xlab = "mu-values")
+points(mu[2,], type = "o", col = "red")
+points(mu[3,], type = "o", col = "green")
+points(mu[4,],type = "o",col = "yellow")
+cat("The pi value for four components are\n",pi,"\n")
+cat("The mu value for four components are\n")
+mu
+cat("The number of iteration is",it,"and and the maximum likelihood value is",llik[it],"\n")
+plot(llik[1:it],type="l",ylab = "Maximum Log Likelihood")
+```
+   
+   The log of likelihood is increasing with increase in K value. So, for log of likelihood value will maximize when the negative value is converging to zero. But since the condition of difference between two consecutive iteration is 0.1, it is not possible to find the iteration number which leads to zero.    
+
+There was a unusual accuracy in randomforest method but it has been corrected. There is mistake in the formula while calculating the number of parameters but it is corrected.  
+# Appendix
+```{r ref.label=knitr::all_labels(), echo = T, eval = F}
+```
+  
+   
+

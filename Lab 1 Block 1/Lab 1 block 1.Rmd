@@ -1,0 +1,331 @@
+---
+title: "Machine Learning Assignment 1"
+author: "Karthikeyan Devarajan - Karde799"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE,echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(warn = -1)
+df <- data.frame(read.csv(file.choose()))
+suppressWarnings(RNGversion("3.5.9"))
+library(glmnet)
+library(kknn)
+df1 <- data.frame(read.csv(file.choose()))
+df2 <- df1[,2:102]
+data(swiss)
+```
+## Assignment 1  
+  
+### 1 P(Y=1/X) > 0.5 
+  
+```{r,echo=FALSE,warning=FALSE}
+set.seed(12345)
+n = dim(df)[1]
+set.seed(12345)
+id=sample(1:n, floor(n*0.5))
+train=df[id,]
+test=df[-id,]
+y=test[,49]
+model_train <- glm( Spam ~.,family=binomial(link='logit'),data=train)
+model_test <- glm(Spam~.,family = binomial(link = 'logit'),data=test)
+train_model_prob <- predict(model_train, newx=as.matrix(train), type="response")
+train_model_pred <- ifelse(train_model_prob > 0.5,'spam','not a spam')
+train_confusion_matrix <- table(train_model_pred,train$Spam)
+cat("The confusion matrix for training data with logistics regression:\n")
+train_confusion_matrix
+miscalculation_rate_train <- 1 - ((sum(diag(train_confusion_matrix))/sum(train_confusion_matrix)))
+cat("The misclassification for training data with logistics regression:",miscalculation_rate_train,"\n")
+test_model_prob <- predict(model_test, newx=as.matrix(test), type="response")
+test_model_pred <- ifelse(test_model_prob > 0.5,'spam','not a spam')
+test_confusion_matrix <- table(test_model_pred,test$Spam)
+cat("The confusion matrix for testing data with logistics regression:\n")
+test_confusion_matrix
+miscalculation_rate_test <- 1 - ((sum(diag(test_confusion_matrix))/sum(test_confusion_matrix)))
+cat("The misclassification for testing data with logistics regression:",miscalculation_rate_test,"\n")
+```
+  
+The model is created using logistic Regression.The training data miscalculation is 16.28% and the testing data miscalculation is 14.90% for the probability 0.5.  
+  
+##  P(Y=1/X) > 0.8  
+
+```{r,echo=FALSE}
+train_model_pred <- ifelse(train_model_prob > 0.8,'spam','not a spam')
+train_confusion_matrix <- table(train_model_pred,train$Spam)
+cat("The confusion matrix for training data with logistics regression:\n")
+train_confusion_matrix
+miscalculation_rate_train <- 1 - ((sum(diag(train_confusion_matrix))/sum(train_confusion_matrix)))
+cat("The misclassification for training data with logistics regression:",miscalculation_rate_train,"\n")
+test_model_prob <- predict(model_test, newx=as.matrix(test), type="response")
+test_model_pred <- ifelse(test_model_prob > 0.8,'spam','not a spam')
+test_confusion_matrix <- table(test_model_pred,test$Spam)
+cat("The confusion matrix for testing data with logistics regression:\n")
+test_confusion_matrix
+miscalculation_rate_test <- 1 - ((sum(diag(test_confusion_matrix))/sum(test_confusion_matrix)))
+cat("The misclassification for testing data with logistics regression:",miscalculation_rate_test,"\n")
+```
+  The model is created using logistic Regression.The training data miscalculation is 24.74% and the testing data miscalculation  is 26.71% for the probability 0.8.The accuracy has decreased when the threshold value increased.  There is increase in false positive rate(i.e not a spam mail but marked as spam mail) when the threshold value is increased.This should not happened so it is bad to use the threshold value as 0.8.
+  
+### kknn = 30  
+  
+```{r,echo=FALSE}
+kknn_30tr <- kknn(Spam ~., train, train, k = 30)
+kknn_30te <- kknn(Spam ~., test, test, k = 30)
+fit <- fitted(kknn_30tr)
+fit1 <- fitted(kknn_30te)
+kknn_predtr <- ifelse(fit>0.5,1,0)
+kknn_predte <- ifelse(fit1>0.5,1,0)
+confusion_matrix_kknntr <- table(kknn_predtr,train$Spam)
+cat("The confusion matrix for training data with kknn method:\n")
+confusion_matrix_kknntr
+confusion_matrix_kknnte <- table(kknn_predte,test$Spam)
+cat("The confusion matrix for testing data with kknn method:\n")
+confusion_matrix_kknnte
+miscalculation_rate <- 1 - ((sum(diag(confusion_matrix_kknntr))/sum(confusion_matrix_kknntr)))
+cat("The misclassification rate for training data with kknn method:",miscalculation_rate,"\n")
+miscalculation_rate3 <- 1 - ((sum(diag(confusion_matrix_kknnte))/sum(confusion_matrix_kknnte)))
+cat("The misclassification rate for testing data with kknn method:",miscalculation_rate3,"\n")
+```
+  
+So, the misclassification for training data and test data is 16.71% and 18.90% respectively for k value as 30.  Since it has to be compared with previous logistic regression, I took the probability as 0.5. The misclassification is lower in logistic regression than kknn = 30. So logistic regression is better than kknn model with 30.
+  
+### kknn = 1  
+
+```{r,echo=FALSE}
+kknn_tr <- kknn(Spam ~., train, train, k = 1)
+kknn_te <- kknn(Spam ~., test, test, k = 1)
+fit <- fitted(kknn_tr)
+fit1 <- fitted(kknn_te)
+kknn_pred1tr <- ifelse(fit>0.5,1,0)
+kknn_pred1te <- ifelse(fit1>0.5,1,0)
+confusion_matrix_kknntr <- table(kknn_pred1tr,train$Spam)
+cat("The confusion matrix for training data with kknn method:\n")
+confusion_matrix_kknntr
+confusion_matrix_kknnte <- table(kknn_pred1te,test$Spam)
+cat("The confusion matrix for testing data with kknn method:\n")
+confusion_matrix_kknnte
+miscalculation_rate <- 1 - ((sum(diag(confusion_matrix_kknntr))/sum(confusion_matrix_kknntr)))
+cat("The misclassification rate for training data with kknn method:",miscalculation_rate,"\n")
+miscalculation_rate3 <- 1 - ((sum(diag(confusion_matrix_kknnte))/sum(confusion_matrix_kknnte)))
+cat("The misclassification rate for testing data with kknn method:",miscalculation_rate3,"\n")
+```
+The misclassification for training data and test data is one. When k = 1, the number of neighbours to be compared will decrease which leads to increase in accuracy.  
+
+## Assignment 3  
+### 3.1 and 3.2  
+
+```{r, echo=FALSE}
+#3.1
+mylin=function(X,Y, Xpred){
+  Xpred1=cbind(1,Xpred)
+  X=cbind(1,X)
+  beta=solve(t(X)%*%X)%*%t(X)%*%Y
+  Res=Xpred1%*%beta
+  return(Res)
+}
+
+myCV=function(X,Y,Nfolds){
+  n=length(Y)
+  p=ncol(X)
+  
+  set.seed(12345)
+  ind=sample(n,n)
+  print(ind)
+  X1=X[ind,]
+  print(head(X1))
+  Y1=Y[ind]
+  print(head(Y1))
+  sf=(n/Nfolds)
+  MSE=numeric(2^p-1)
+  Nfeat=numeric(2^p-1)
+  Features=list()
+  curr=0
+  
+  for (f1 in 0:1)
+    for (f2 in 0:1)
+      for(f3 in 0:1)
+        for(f4 in 0:1)
+          for(f5 in 0:1){
+            model= c(f1,f2,f3,f4,f5)
+            if (sum(model)==0) next()
+            SSE=0
+            
+            for (k in 1:Nfolds){
+              indices<-(((k-1)*sf)+1):(k*sf)
+              X_test<-X1[indices,which(model==1)]
+              X_train<-X1[-indices,which(model==1)]
+              Yp<-Y1[indices]
+              Y_train<-Y1[-indices]
+              Ypred<-mylin(X_train,Y_train,X_test)
+              SSE=SSE+sum((Ypred-Yp)^2)
+            }
+            curr=curr+1
+            MSE[curr]=SSE/n
+            Nfeat[curr]=sum(model)
+            Features[[curr]]=model
+          }
+  plot(MSE,Nfeat)
+  i=which.min(MSE)
+  return(list(CV=MSE[i], Features=Features[[i]]))
+}
+#3.2
+f <- myCV(X=as.matrix(swiss[,2:6]),Y=swiss[[1]],Nfolds=5)
+f
+```
+  
+  The number of parameters which is found to be significant are 49 parameters. The MSE values are less for the models 1 0 1 1 1 (**Agriculture**, **Education**, **Catholic**, **Infant.Mortality**) and the cv score are 68.9 68.3 74.2 60.5 57.4 58.3. From the cv scores, the parameters will have considerable significance over fertility. The graph is plotted between MSE and Number of feature.The beta values are calculated based on the formula which we refered while forming linear regression. We are adding 1 to the Xpred to consider for the intercept.  
+  
+## Assignment 4  
+
+### 4.1 Linear Regression  
+
+
+```{r 1,echo=FALSE}
+#4.1
+Model <- lm(df1$Moisture ~ df1$Protein)
+plot(df1$Protein,df1$Moisture,type = "p",xlab = "Moisture",ylab = "Protien",main = "Moisture Vs Protein")
+abline(lm(df1$Moisture ~ df1$Protein), col = "blue")
+```
+  
+Moisture = 15.925 + 2.6738*Protein  
+Moisture is positively correlated with Protein. The p-value is less than 0.05.So therefore Protein is a siginificant variable for Moisture.  
+  
+### 4.2  Polynomial Regression  for training data
+  
+```{r 2,echo=FALSE}
+#4.2
+n=dim(df1)[1]
+set.seed(12345)
+id = sample(1:n, floor(n*0.5))
+train=df1[id,]
+test=df1[-id,]
+Model <-  list()
+Bias <- vector()
+Variance <- numeric(6)
+MSE <- vector()
+Y <- numeric(6)
+
+for(i in 1:6)
+{
+  Model$i <- lm(Moisture ~ poly(Protein,i), data = train)
+  Y <- predict(Model$i,train,type = "response")
+  Bias[i] <- mean(Y) - mean(train$Moisture)
+  Variance[i] <- var(Y)
+  MSE[i] <- mean((train$Moisture - Y)^2)
+}
+plot(x = Bias, y = Variance, main = "Bias-Variance tradeoff",type = "l")
+```
+  
+When the degree of polynomial increases for linear regression, the MSE criterion decreases. The MSE criterion is minimum for the Model with degree of polynomial as 6. The data is normally distributed and the MSE value shows the shape of normal distribution curve when the degree of polynmial increases.This result is enough to support the fact that MSE can be used as criterion when fitting these type of models.The data is normally distributed and the MSE value shows the shape of normal distribution curve when the degree of polynmial increases.  
+  
+### 4.3 Polynomial Regression  for validation data  
+  
+```{r 3,echo=FALSE}
+#4.3
+n=dim(df1)[1]
+set.seed(12345)
+id = sample(1:n, floor(n*0.5))
+train=df1[id,]
+test=df1[-id,]
+Model_val <-  list()
+Bias_val <- vector()
+Variance_val <- numeric(6)
+MSE_val <- vector()
+Y_val <- numeric(6)
+#Prediction for Validate data
+for(i in 1:6)
+{
+  Model_val$i <- lm(Moisture ~ poly(Protein,i), data = train)
+  Y_val <- predict(Model_val$i,newdata = test,type = "response")
+  Bias_val[i] <- mean(Y_val) - mean(test$Moisture)
+  Variance_val[i] <- var(Y_val)
+  MSE_val[i] <- mean((test$Moisture - Y_val)^2)
+}
+plot(x=c(1:6),type="l",y=MSE_val, xlab = "i", ylab = "MSE",col = "green",main = "Plot showing how training and validation MSE depend on i",ylim = c(31.5,35))
+points(x=c(1:6),type = "l",y=MSE,col = "red")
+legend("topright",c("Validation","Training"),col=c("red","green"),lty = c(1,1))
+plot(x = Bias_val, y = Variance_val, main = "Bias-Variance tradeoff",type = "l")
+```
+  
+  When the degree of polynomial increases for linear regression, the MSE criterion increases. The MSE criterion is minimum for the Model with degree of polynomial as 6.The Mean Square Estimator criterion is Maximum likelihood Estimator for the normal distribution of errors.  
+  
+### 4.4 StepAIC   
+
+
+```{r 4,echo=FALSE}
+#4.4
+tecator_stepAIC <- df1[,2:102]
+stepAIC_fit <- lm(tecator_stepAIC$Fat ~. ,data =tecator_stepAIC )
+step <- MASS::stepAIC(stepAIC_fit,direction = "both")
+final_model <- step$anova
+step_sm <- summary(step)
+cat("The number of parameter selected is:",length(coef(step)),"\n")
+```
+
+  In the stepAIC, 64 parameter have been selected as siginficant factor to have a influence on the response variable(i.e Fat). The AIC value is constant for every trial after reaching 95.  
+  
+### 4.5 Ridge Regression 
+  
+```{r 5,echo=FALSE}
+#4.5
+x_var <- data.matrix(df2[,1:100])
+y_var <- df2[,"Fat"]
+lambda_seq <- 10^seq(0.1,3,0.1)
+fit <- glmnet(x_var, y_var, alpha = 0, lambda  = lambda_seq)
+plot(fit,xvar = "lambda",label = TRUE)
+ridge_cv <- glmnet::cv.glmnet(x_var, y_var, alpha = 0, lambda = lambda_seq)
+best_lambda <- ridge_cv$lambda.min
+best_lambda
+best_fit <- ridge_cv$glmnet.fit
+ridge_cv$glmnet.fit
+plot(ridge_cv,type = 'l')
+
+```
+  
+When the log(lambda)/lambda is increasing, the model coefficients are moving towards zero.When log(lambda)/lambda is zero,the model coefficients wil become zero. When log(lambda)/lambda is zero, then Ridge regression will be just a linear regression.  
+  
+### 4.6 Lasso Regression  
+  
+```{r 6,echo=FALSE}
+#4.6
+x_var <- data.matrix(df2[,1:100])
+y_var <- df2[,"Fat"]
+lambda_seq <- 10^seq(0.1,3,0.1)
+lambda_seq[length(lambda_seq)+1] = 0
+fit <- glmnet(x_var, y_var, alpha = 1, lambda  = lambda_seq)
+plot(fit,xvar = "lambda",label = TRUE)
+lasso_cv <- cv.glmnet(x_var, y_var, alpha = 1, lambda = lambda_seq,standardize = T,nfolds = 10) 
+best_lambda <- lasso_cv$lambda.min
+best_lambda
+best_fit <- lasso_cv$glmnet.fit
+plot(lasso_cv,type = 'l')
+
+```
+  
+The lasso regression takes more parameters and lasso Refression takes less parameters to form a model. This model with less parameters will remove the problem of overfitting.In lasso regression, the lambda has minimal effect on the coefficient estimates, with a minor contribution to the model, to be exactly equal to zero. This means that, lasso can be considered for reducing the complexity of model by performing variable selection.  
+  
+### 4.7  and 4.8  
+  
+```{r 7,echo=FALSE}
+#4.7 and # 4.8
+model_cv <- cv.glmnet(x_var, y_var, alpha = 1, type.measure = "mse")
+b_lambda <- model_cv$lambda.min
+model_cv$lambda
+b_lambda
+lasso_best <- glmnet(x=x_var, y=y_var,alpha=1, lambda = b_lambda)
+cv_score <- cbind(model_cv$lambda,model_cv$cvm)
+min_cv <- cv_score[which(cv_score[,1] == model_cv$lambda.min),2]
+optimal_features <- as.matrix(coef(lasso_best))
+total_optimal_features <- length(which(optimal_features[,1] !=0))
+plot(model_cv$lambda,model_cv$cvm,type = 'l')
+```
+  
+  we can interpret that the Cross validation technique chose optimal features of 26 which is less than stepAIC features 64 in fitting an optimal model. The CV technique had an minimal lamda of 0.01072971 where as STEPAIC is an incremental model where the features are removed if it is not making an impact on prediction either starting from 1st variable going in forward direction or from last variable going backward direction or both direction simultaneously and hence 64 features where selected.When lambda is zero and in cv minimal technique, all the 100 parameters as significant factors. Due to lambda equals zero, the absolute value of magnitude will be zero and it will make lasso regression same as linear regression. This will lead to overfitting. So stepAIC is better than cv of lasso when lambda is zero.  
+  
+# Appendix
+```{r ref.label=knitr::all_labels(), echo = T, eval = F}
+```
+  
+  

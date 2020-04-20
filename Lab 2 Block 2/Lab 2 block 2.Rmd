@@ -1,0 +1,290 @@
+---
+title: "Machine learning lab2 block2"
+author: "Karthikeyan Devarajan- Karde799"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library(hrbrthemes)
+library(dygraphs)
+library(mgcv)
+library(pamr)
+library(glmnet)
+library(kernlab)
+
+```
+  
+## Assignment 1: Using GAM and GLM to examine the mortality rates.  
+
+### 1. Time Series Plot
+```{r,out.height='90%',echo=FALSE}
+sf <- read_excel(file.choose())
+sf1 <- read.csv(file.choose(),sep = ";")
+M <- sf %>% ggplot(aes(x=Time, y=Mortality)) +
+  geom_area(fill="#69b3a2", alpha=1) +
+  geom_line(color="#69b3a2") +
+  ylab("Morality") 
+ggplotly(M)
+```
+  
+```{r,out.height='90%',echo=FALSE}
+I <- sf %>% ggplot( aes(x=Time, y=Influenza)) +
+  geom_area(fill="#69b3a2", alpha=1) +
+  geom_line(color="#69b3a2") +
+  ylab("Influenza") 
+ggplotly(I)
+```
+  
+The Mortality and Influenza are influenced at the same time period. The two variables are increased at the same time period.  
+
+### 2&3.GAM Model Analysis
+
+```{r,out.height='25%',echo=FALSE}
+#2 & 3 
+model = gam(Mortality~Year+s(Week, k= 52), data = sf, family = gaussian, method = "GCV.Cp")
+summary(model)
+prediction <- predict(model,sf)
+sf$Predicted <- prediction
+ggplot(sf)+
+  geom_point(aes(x=Time,y=Mortality,color="Mortality_data"))+
+  ggtitle("Morality Throughout the year")
+
+ggplot(sf)+
+  geom_point(aes(x=Time,y=Predicted,color="Mortality_predicted"))+
+  ggtitle(" Predicted value of Mortality")
+```
+we know that the general probablistic model is $y = w_o + w_1x_1 + s(x_2) + e$.
+
+Probilistic model: $Mortality = -680.589 + 1.233*Year + s(Week) + e$
+
+The Predicted value graph is similar to the original values.Therefore, It can be said that this model is good approximation of the mortality. The increase in complexity of the spline function of variables in the model will increase the accuracy of the model. While adding the complexity of the model, the spline function should be significant on the Mortality. The p-value for the factor week is less than alpha=0.001. The variable week is significant for Mortality.  
+
+The range of Mortality value increases each year. In the starting years, the range is small and increases when year increases.  
+
+```{r,out.height='30%',echo=FALSE}
+plot.gam(model,residuals = TRUE)
+```
+  The rate of mortality is less in the middle of the year but in the rise during the initial and final weeks.  
+### 4. Influence of Penalty factor on spline function  
+
+```{r,echo=FALSE}
+model_optimal <- gam(Mortality~Year+s(Week, k=52, sp=model$sp),data=sf,family = "gaussian")
+cat("The optimal penalty factor is:",model$sp,"\n")
+cat("The deviance at the optimal penalty factor is:",model_optimal$deviance,"\n")
+```
+  
+```{r,echo=FALSE,out.height='30%'}
+model_Low <-  gam(Mortality~Year+s(Week, k=52, sp=0),data=sf,family = "gaussian")
+model_High <-  gam(Mortality~Year+s(Week, k=52, sp=100),data=sf,family = "gaussian")
+pred_Low <- predict(model_Low,sf)
+pred_High <- predict(model_High,sf)
+
+sf$pred_Low <- pred_Low
+sf$pred_high <- pred_High
+
+ggplot(sf)+
+  geom_point(aes(x=Time,y=Mortality,color="Mortality_data"))+
+  geom_line(aes(x=Time,y=pred_Low,color="Low penalty"))+
+  geom_line(aes(x=Time,y=pred_high,color="High penalty"))+
+  xlab("Time")+
+  ggtitle("Predicted values and Data Mortality for low and high penalty factor")
+
+```
+
+The low penalty factor i.e zero is overfitting the graph. From this, we explain that the lower penalty factor will overfit the data and minimize the error. The high penalty factor smoothen the graph. So, the high penalty factor will have more error value. 
+
+```{r,echo=FALSE,out.height='25%'}
+model_seq <- list()
+dev <- numeric()
+dof <- numeric()
+penalty_factor <- seq(0,10,0.1)
+for(sp in penalty_factor){
+  model_seq <- gam(Mortality~Year+s(Week, k=52, sp=sp),data=sf,family = "gaussian")
+  dev[(sp*10)+1] <- model_seq$deviance
+  dof[(sp*10)+1] <- sum(model_seq$edf)
+}
+
+graph_variables <- data.frame(PenaltyFactor=penalty_factor,Deviance=dev,DegreeOfFreedom=dof)
+ggplot(graph_variables)+
+  geom_line(aes(x=PenaltyFactor,y=Deviance,color="Deviance"))+
+  ggtitle("Relation between penalty factor and deviance")
+
+ggplot(graph_variables)+
+  geom_line(aes(x=PenaltyFactor,y=DegreeOfFreedom,color="DOF"))+
+  ggtitle("Relation between penalty factor and DOF")
+```
+  
+The deviance increases when the penalty factor increases wheres the degree of freedom decreases when penalty factor increases.  
+
+### 5. Relation between GAM and residuals  
+
+```{r,echo=FALSE,out.height='25%'}
+residual_matrix <- data.frame(Time_line=sf$Time,Influenza=sf$Influenza,Residuals=as.data.frame(model$residuals))
+ggplot(residual_matrix)+
+  geom_line(aes(x=Time_line,y=Influenza,color="Influenza"))+
+  geom_line(aes(x=Time_line,y=model.residuals,color="Residuals"))
+plot(residual_matrix$Influenza,residual_matrix$model.residuals,xlab = "Influenza",ylab = "Residuals")
+```
+  In plot 1, It can be concluded that whenever the Influenza was increasing, the residual was also increasing. The statement can be supported from plot 2.  
+  
+### 6.GAM for multipe spline function  
+
+```{r,echo=FALSE,out.height='25%'}
+ model_mul <-gam(Mortality~s(Year,k=9)
+                 +s(Week,k=52)
+                 +s(Influenza,k=85),data=sf,
+                 family = "gaussian",method="GCV.Cp")
+summary(model_mul)
+pred_mul <- predict(model_mul,sf)
+final_matrix <- data.frame(TIME=sf$Time,MORTALITY=sf$Mortality,PRED_MORALITY=pred_mul)
+ggplot(final_matrix)+
+  geom_line(aes(x=TIME,y=MORTALITY,color="Original"))+
+  geom_line(aes(x=TIME,y=PRED_MORALITY,color="Predicted"))
+
+par(mfrow=c(2,2))
+plot.gam(model_mul)
+```
+  
+The year is not significant towards Morality but whereas week and influenza have significant influence over Morality.  
+
+Probilistic model: $Mortality = 1783.77 + s(Year) + s(Week) + s(Influenza) + e$  
+
+## Assignment 2.High dimensional Methods  
+
+### Nearest shrunken Centroid  
+
+```{r,echo=FALSE,out.height='25%'}
+set.seed(12345)
+sf1$Conference <- as.factor(sf1$Conference)
+n=dim(sf1)[1]
+id=sample(1:n, floor(n*0.70))
+train=sf1[id,]
+test=sf1[-id,]
+rownames(train) <- 1:nrow(train)
+trainx <- t(as.matrix(train[,-4703]))
+trainy <- as.matrix(train$conference)
+Train_list <- list(x=trainx,y=trainy,geneid=as.character(1:nrow(trainx)),genenames=rownames(trainx))
+model1 <- pamr.train(Train_list)
+model.cv1 <- pamr.cv(model1,Train_list,nfold = 10)
+pamr.plotcv(model.cv1)
+minimum_treshold <- model.cv1$threshold[which.min(model.cv1$error)]
+model_optimal1 <- pamr.train(Train_list, threshold = minimum_treshold)
+feature_selected <- pamr.listgenes(model1, Train_list, threshold = minimum_treshold,genenames=T)
+```
+  
+```{r,echo=FALSE}
+cat("The minimum Threshold value is:",minimum_treshold,"\n")
+No_Parameters1 <- dim(feature_selected)[1]
+cat("Total Features Selected: ",No_Parameters1,"\n")
+cat("Top 10 contributing features are: \n",feature_selected[1:10,"name"],"\n")
+testx <- t(as.matrix(test[,-4703]))
+testy <- as.matrix(test$conference)
+prediction1 <- pamr.predict(model1,newx=testx,threshold = minimum_treshold,type="class")
+confusion_matrix1 <- table(testy,prediction1)
+cat("The confusion matrix is:\n")
+confusion_matrix1
+misclassification_rate1 <- 1- sum(diag(confusion_matrix1))/sum(confusion_matrix1)
+cat("Misclassification rate is:",misclassification_rate1)
+```
+  
+### Elastic Net with binomial response  
+  
+```{r,echo=FALSE,out.height='25%'}
+set.seed(12345)
+trainx <- as.matrix(train[,-4703])
+trainy <- as.matrix(train$Conference)
+model2 <- glmnet(x=trainx,y=trainy,family = "binomial",alpha = 0.5)
+model.cv2 <- cv.glmnet(x=trainx,y=trainy,family = "binomial",alpha = 0.5)
+plot(model.cv2)
+testx <- as.matrix(test[,-4703])
+testy <- as.matrix(test$Conference)
+prediction2 <- predict(model2,testx,s = model.cv2$lambda.min, type="class")
+confusion_matrix2 <- table(testy,prediction2)
+cat("The confusion matrix is:\n")
+confusion_matrix2
+misclassification_rate2 <- 1- sum(diag(confusion_matrix2))/sum(confusion_matrix2)
+cat("Misclassification rate is: ",misclassification_rate2,"\n")
+No_Parameters2 <- dim(coef(model2))[2]
+cat("Number of features selected: ",No_Parameters2,"\n")
+```
+  
+### Support Vector Machine  
+
+```{r,echo=FALSE}
+set.seed(12345)
+model3 <- ksvm(Conference~.,data=train,kernel="vanilladot",scaled=FALSE)
+prediction3 <- predict(model3,test,type="response")
+confusion_matrix3 <- table(Actual=test$Conference,Predicted=prediction3)
+cat("The confusion matrix is:\n")
+confusion_matrix3
+misclassification_rate3 <- 1- sum(diag(confusion_matrix3))/sum(confusion_matrix3)
+cat("Misclassification rate is: ",misclassification_rate3,"\n")
+No_Parameters3 <- length(model3@coef[[1]])
+cat("Number of feature selected: ",No_Parameters3,"\n")
+
+```
+  
+```{r,echo=FALSE}
+misclassification <-c(misclassification_rate1,misclassification_rate2,misclassification_rate3)
+model_list <- c("Nearest Shrunken Centroid","Elastic Net","Support Vector Machine")
+feature_selected <- c(No_Parameters1,No_Parameters2,No_Parameters3)
+comparison_table <- data.frame(Model=model_list,misClassificationrates=misclassification,FeaturesSelected=feature_selected)
+cat("The comparison table is as follows:\n")
+comparison_table
+```
+  
+  
+```{r,echo=FALSE,out.height='5%'}
+p_value <- numeric(length = 4702)
+test <- list()
+bh <- numeric(length = 4702)
+for (i in 1:4702){
+  test[[i]] <- t.test(sf1[,i] ~ Conference, data = sf1)
+  p_value[i] <- test[[i]]$p.value
+  bh[i] <- ((0.05)*(i/4702))
+}
+p_data_frame <- data.frame(p_value,bh)
+p_data_frame <- p_data_frame[order(p_data_frame$p_value),]
+p_data_frame <- p_data_frame[which(p_data_frame$p_value <= p_data_frame$bh),]
+No_of_feature = nrow(p_data_frame)
+cat("The Number of features selected are:",No_of_feature,"\n")
+index <- rownames(p_data_frame)
+cat("The Selected parameters are listed below:\n")
+data.frame(selected_Feature=colnames(sf1[,as.numeric(index)]))
+```
+
+# Appendix
+```{r ref.label=knitr::all_labels(), echo = T, eval = F}
+```
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

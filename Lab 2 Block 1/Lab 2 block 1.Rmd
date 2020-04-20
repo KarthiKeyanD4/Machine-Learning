@@ -1,0 +1,310 @@
+---
+title: "Machine Learning 2"
+author: "Karthikeyan Devarajan - Karde799"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(tree)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+library(FactoMineR)
+library(boot)
+library(dplyr)
+library(ggplot2)
+library(fastICA)
+```
+  
+## Question 1:Decision Tree with Train/Test/Validate as 50/25/25.  
+
+Decison Tree can be split into nodes using gini index and deviation method.  
+1) Deviance  
+```{r ,echo=FALSE}
+sf2 <- read_excel(file.choose())
+sf1 <- read.csv2(file.choose(),header = T,sep = ";",quote = "\"",fill=T)
+sf3 <- read.csv2(file.choose(),header = T)
+n=dim(sf2)[1]
+set.seed(12345) 
+id=sample(1:n, floor(n*0.5)) 
+train=sf2[id,] 
+id1=setdiff(1:n,id)
+set.seed(12345) 
+id2=sample(id1, floor(n*0.25)) 
+valid=sf2[id2,]
+id3=setdiff(id1,id2)
+test=sf2[id3,] 
+sf2.model_d <- tree(as.factor(good_bad)~.,data = train,split = c("deviance"))
+plot(sf2.model_d)
+text(sf2.model_d,cex=0.75)
+sf2.train_d <- predict(sf2.model_d, train,type = "class")
+train_model_pred_d <- sf2.train_d != as.factor(train$good_bad)
+train_confusion_matrix_d <- table(train_model_pred_d,train$good_bad)
+cat("The confusion matrix for train data using deviance method is:\n")
+train_confusion_matrix_d
+miscalculation_rate_train_d <- ((sum(diag(train_confusion_matrix_d))/sum(train_confusion_matrix_d)))
+cat("The miscalculation rate for train data using deviance method is:",miscalculation_rate_train_d,"\n")
+sf2.test_d <- predict(sf2.model_d, test,type = "class")
+test_model_pred_d <- sf2.test_d != as.factor(test$good_bad)
+test_confusion_matrix_d <- table(test_model_pred_d,test$good_bad)
+cat("The confusion matrix for test data using deviance method is:\n")
+test_confusion_matrix_d
+miscalculation_rate_test_d <- ((sum(diag(test_confusion_matrix_d))/sum(train_confusion_matrix_d)))
+cat("The miscalculation rate for test data using deviance method is:",miscalculation_rate_test_d,"\n")
+```
+  
+2)Gini index  
+
+```{r,echo=FALSE}
+sf2.model_g <- tree(as.factor(good_bad)~.,data = train,split = c("gini"))
+plot(sf2.model_g)
+text(sf2.model_g,cex=0.75)
+sf2.train_g <- predict(sf2.model_g, train,type = "class")
+train_model_pred_g <- sf2.train_g != as.factor(train$good_bad)
+train_confusion_matrix_g <- table(train_model_pred_g,train$good_bad)
+cat("The confusion matrix for train data using gini index is:\n")
+train_confusion_matrix_g
+miscalculation_rate_train_g <- ((sum(diag(train_confusion_matrix_g))/sum(train_confusion_matrix_g)))
+cat("The miscalculation rate for train data using gini index is:",miscalculation_rate_train_g,"\n")
+sf2.test_g <- predict(sf2.model_g, test,type = "class")
+test_model_pred_g <- sf2.test_g != as.factor(test$good_bad)
+test_confusion_matrix_g <- table(test_model_pred_g,test$good_bad)
+cat("The confusion matrix for test data using gini index is:\n")
+test_confusion_matrix_g
+miscalculation_rate_test_g <- ((sum(diag(test_confusion_matrix_g))/sum(train_confusion_matrix_g)))
+cat("The miscalculation rate for test data using gini index is:",miscalculation_rate_test_g,"\n")
+```
+
+```{r,echo=FALSE}
+optimal_train <- prune.tree(sf2.model_d)
+optimal_valid <- prune.tree(sf2.model_d,newdata = valid)
+optimal_leaf <-  optimal_valid$size[which.min(optimal_valid$dev)]
+cat("The optimal leaf value is:",optimal_leaf,"\n")
+optimal_tree  <- prune.tree(sf2.model_d,best=optimal_leaf)
+nodes_optimum <- as.numeric(rownames(optimal_tree$frame))
+cat("The optimum number of nodes:",nodes_optimum,"\n")
+plot(optimal_tree )
+text(optimal_tree )
+title(main="Optimal Tree")
+```
+
+
+## Naive Bayes  
+
+```{r, echo=FALSE}
+Naives_Bayes <- naiveBayes(as.factor(good_bad)~., data=train,laplace = 1,na.omit(NA))
+Y_pred <- predict(Naives_Bayes, test, type="class")
+prob <- Y_pred != test$good_bad
+confusion_matrix_naive <- table(prob, test$good_bad,dnn=c("Prediction","Actual"))
+cat("The confusion matrix for Naives Bayes is:\n")
+confusion_matrix_naive
+miscalculation_rate_naive <- ((sum(diag(confusion_matrix_naive))/sum(confusion_matrix_naive)))
+cat("The miscalculation rate for naives bayes is:",miscalculation_rate_naive,"\n")
+```
+  
+## ROC Curve
+````{r echo=FALSE, message=FALSE, warning=FALSE}
+pie_seq = seq(0.05, 0.95, 0.05)
+nayes_res = matrix(nrow = 0, ncol = 3)
+optim_res = matrix(nrow = 0, ncol = 3)
+for(i in pie_seq){
+  prediction = as.data.frame(predict(Naives_Bayes, test, type = "raw"))
+  prediction$res = ifelse(prediction$good > i, "good", "bad")
+  miscalsification = sum(prediction$res == test$good_bad)/(nrow(prediction))
+  m = (test$good_bad == "good")*1
+  n = (prediction$res == "good")*1
+  tp = sum(m*n)
+  false_positive = abs(sum(n)-tp)/sum(abs(m-1))
+  true_positive = tp/(sum(m))
+  nayes_res = rbind(nayes_res, c(miscalsification, true_positive, false_positive))
+  
+  prediction = as.data.frame(predict(optimal_tree,test))
+  prediction$res = ifelse(prediction$good>i, "good", "bad")
+  miscalsification = sum(prediction$res == test$good_bad)/(nrow(prediction))
+  m= (test$good_bad == "good")*1
+  n = (prediction$res == "good")*1
+  tp = sum(m*n)
+  false_positive = (abs(sum(n)-tp))/sum(abs(m-1))
+  true_positive = tp/(sum(m))
+  optim_res = rbind(optim_res, c(miscalsification, true_positive, false_positive))
+}
+
+nayes_res = as.data.frame(nayes_res)
+colnames(nayes_res) = c("MiscRate", "TP", "FP")
+optim_res = as.data.frame(optim_res)
+colnames(optim_res) = c("MiscRate", "TP", "FP")
+
+ggplot() + geom_line(data=nayes_res,aes(x=FP,y=TP,color="red")) +
+  geom_line(data=optim_res,aes(x=FP,y=TP,color="blue"))+ scale_color_discrete(name="Model",labels=c("Naive Bayes","Optimal Tree")) +
+  geom_abline(intercept=0,slope=1)+
+  xlab("FPR")+ylab("TPR")+ggtitle("ROC curve between Naive Bayes and Optimal Tree")
+````
+ 
+ Naives Bayes is similar to optimal tree since it has covered more area in ROC curve.
+
+# Question 2:Uncertainity Estimation  
+
+## a)Plot EX on MET afte rearranging  
+
+```{r, echo=FALSE}
+sf1 %>% arrange(MET)
+plot(sf1$MET,sf1$EX)
+```
+  
+## b) Original and Fitted Value,Histogram of Residuals
+```{r,echo=FALSE}
+sf1.lte <- tree(EX~MET,data = sf1,control = tree.control(48,minsize=2))
+set.seed(12345)
+plot(sf1.lte)
+text(sf1.lte)
+sf1.cv <- cv.tree(sf1.lte)
+plot(sf1.cv$size,sf1.cv$dev, type="b", main="Deviance of fitted tree Vs tree size",
+     xlab="Size",ylab="Deviance")
+reg_tree <- prune.tree(sf1.lte,best=3)
+plot(reg_tree)
+text(reg_tree,pretty=1)
+Y_pred <- predict(reg_tree,sf1)
+residual <- sf1$EX - Y_pred
+
+hist(residual,main=c("Residuals of regression tree"),
+     xlab="residual")
+plot(sf1$MET,Y_pred,col="red",ylim=c(240,400),main="Fitted values and original values - Regression Tree",
+     ylab="Expenditures",
+     xlab="MET")
+points(sf1$MET,sf1$EX,pch="*")
+legend(x=20,y=400,c("original values","fitted values"),
+       pch=c("*","o"),
+       col=c("black","red"))
+```
+  
+  The histogram is skewed towards right. The fit is said to be not proper, when it is skewed towards any one direction. So, this fit need to be improved.  
+
+## c)Non-Parametric Bootstrap with 95% Confidence Band  
+
+````{r,echo=FALSE}
+set.seed(12345)
+f1 <- function(data,ind){
+  sf_tr <- data[ind,]
+  res <- tree(EX ~ MET,sf_tr, control = tree.control(dim(sf_tr)[1],minsize=2))
+  best_tree <- prune.tree(res,best=3)
+  Y_predictions <- predict(best_tree, newdata=sf1)
+  return(Y_predictions)
+}
+non_para_boot_obj <- boot(sf1,f1, R=1000)
+confidence_envel <- envelope(non_para_boot_obj)
+
+plot(sf1$MET,Y_pred,col="red",ylim=c(150,500),main="Best tree - 95% non-parametric bootstrap confidence bands",
+     ylab="EX",
+     xlab="MET")
+points(sf1$MET,sf1$EX,pch="*")
+points(sf1$MET,confidence_envel$point[2,], type="o", col="green")
+points(sf1$MET,confidence_envel$point[1,], type="o", col="blue")
+
+legend(x=20,y=500,c("original values","fitted values","confidence intervals1","confidence intervals2"),
+       pch=c("*","o",NA,NA),lwd=1,lty=c(NA,NA,1,1),
+       col=c("black","red","blue","green"))
+````
+  
+  The confidence interval is very narrow. This is due to the distribution is skewed to right. This model is similar to the previous graph. The range for EX intervals  has increased from 150 to 400. The extreme value is wider than the previuos graph.  
+  
+## d)Parametric Bootstrap with 95% Confidence Band   
+  
+````{r,echo=FALSE,warning = FALSE,out.height='15%'}
+ran_arg <- function(sf_tr,mle){
+  data = data.frame(MET = sf_tr$MET, EX = sf_tr$EX)
+  n = length(data$EX)
+  data$EX = rnorm(n,predict(mle, newdata=data),
+                   sd(sf1$EX-predict(mle, newdata=data)))
+  return(data)
+}
+
+f2 = function(sf_tr){
+  res <- tree(EX ~ MET,sf_tr, control = tree.control(dim(sf_tr)[1],minsize=2))
+  best_tree <- prune.tree(res,best=3)
+  Y_predictions <- predict(best_tree, newdata=sf1)
+  return(Y_predictions)
+}
+
+f3 = function(sf_tr){
+  res <- tree(EX ~ MET,sf_tr, control = tree.control(dim(sf_tr)[1],minsize=2))
+  best_tree <- prune.tree(res,best=3)
+  Y_predictions <- rnorm(dim(sf1)[1],predict(best_tree, newdata=sf1),sd(residual))
+  return(Y_predictions)
+}
+
+set.seed(12345)
+para_boot_obj1 <- boot(sf1,statistic = f2, R=1000,mle=reg_tree,ran.gen=ran_arg,sim="parametric")
+confidence_envel1 <- envelope(para_boot_obj1)
+set.seed(12345)
+para_boot_obj2 <- boot(sf1,statistic =  f3, R=1000,mle=reg_tree,ran.gen=ran_arg,sim="parametric")
+confidence_envel2 <- envelope(para_boot_obj2)
+
+plot(sf1$MET,Y_pred,col="red",ylim=c(150,500),main=c("Regression tree - 95% parametric bootstrap confidence"),
+     ylab="EX",
+     xlab="MET")
+points(sf1$MET,sf1$EX,pch="*")
+points(sf1$MET,confidence_envel1$point[2,], type="l", col="green")
+points(sf1$MET,confidence_envel1$point[1,], type="l", col="green")
+points(sf1$MET,confidence_envel2$point[2,], type="l", col="yellow")
+points(sf1$MET,confidence_envel2$point[1,], type="l", col="yellow")
+legend(x=20,y=550,c("original values","fitted values","confidence bands","prediction bands"),
+       pch=c("*","o",NA,NA),lwd=1,lty=c(NA,NA,1,1),
+       col=c("black","red","green","yellow"))
+```
+  
+This is for parametric bootstrap. The graph in question 2 lies between this confidence interval. The paramteric bootstrap interval better than non parametric bootstrap. This can be considered as a good fit but it can be improved.
+
+# Question 3: Principal Component Analysis
+
+```{r,echo=FALSE,warning=FALSE}
+set.seed(12345)
+pca_matrix <-  PCA(sf3,graph = FALSE)
+lambda = pca_matrix$eig[,1] 
+#eigenvalues
+cat("The lambda values are:\n")
+as.data.frame(lambda)
+#proportion of variation
+pov <- pca_matrix$eig[,2]
+cat("The Percentage of variation:\n")
+as.data.frame(pov)
+plot(pca_matrix$ind$coord[,1], pca_matrix$ind$coord[,2], ylim=c(-5,15), xlab = "PC1", ylab = "PC2", main = "PC1 vs PC2 - Scores" )
+```
+The First two PC function contributes 99%(PC1=94.6,PC2=4.33) of the total variance. Some Most initial points accumuated in the left and there is one point which looks like a outlier.  
+
+```{r,echo=FALSE}
+res <- (pca_matrix$var$coord/sqrt(pca_matrix$eig[,1]))
+pca_1 <- plot(res[,1], main="Traceplot, PC1")
+pca_2 <- plot(res[,2],main="Traceplot, PC2")
+```
+  
+  
+The first principle has a influence from the variable but the second principle component has influence only with parameters over 100 to 126.  
+
+```{r,echo=FALSE}
+barplot(sqrt(pca_matrix$eig[,1]))
+set.seed(12345)
+Ica <- fastICA(sf3,2)
+W_matrix <- Ica$K %*% Ica$W
+par(mfrow = c(2,2))
+ica_1 <- plot(W_matrix[,1], main="Traceplot, IC1")
+ica_2 <- plot(W_matrix[,2], main="Traceplot, IC2")
+maximum_Likelihood <- solve(Ica$W)
+X_tra <- Ica$X %*% W_matrix
+D <- X_tra %*% maximum_Likelihood
+par(mfrow = c(1,2))
+plot(D, main = "Latent Plot", xlab = "Feature 1", ylab = "Feature 2")
+plot(pca_matrix$ind$coord[,1], pca_matrix$ind$coord[,2], ylim=c(-5,15), main = "PC1 vs PC2 - Scores", xlab = "PC1", ylab = "PC2")
+
+```
+  
+The latent plot looks same as the score plot but with the opposite image. The latent feature is (-1) of pca feature. That means they are high negatively correlated.  
+# Appendix
+```{r ref.label=knitr::all_labels(), echo = T, eval = F}
+```
+  
+   
